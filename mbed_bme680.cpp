@@ -1,21 +1,16 @@
 #include "mbed_bme680.h"
 
 BME680::BME680() {
-    BME680(BME680_DEFAULT_ADDRESS);
-}
-
-BME680::BME680(uint8_t adr) {
     _filterEnabled = _tempEnabled = _humEnabled = _presEnabled = _gasEnabled = false;
-    _adr = adr;
 }
 
 bool BME680::begin() {
     int8_t result;
 
-    gas_sensor.dev_id = _adr;
-    gas_sensor.intf = BME680_I2C_INTF;
-    gas_sensor.read = &BME680::i2c_read;
-    gas_sensor.write = &BME680::i2c_write;
+    gas_sensor.dev_id = 0;
+    gas_sensor.intf = BME680_SPI_INTF;
+    gas_sensor.read = &BME680::spi_read;
+    gas_sensor.write = &BME680::spi_write;
     gas_sensor.delay_ms = BME680::delay_msec;
 
     setHumidityOversampling(BME680_OS_2X);
@@ -23,6 +18,8 @@ bool BME680::begin() {
     setTemperatureOversampling(BME680_OS_8X);
     setIIRFilterSize(BME680_FILTER_SIZE_3);
     setGasHeater(320, 150); // 320*C for 150 ms
+
+    cs.write(1);
 
     result = bme680_init(&gas_sensor);
 
@@ -275,42 +272,47 @@ bool BME680::setIIRFilterSize(uint8_t filter_seize) {
 
 
 /**
- * Reads 8 bit values over I2C
+ * Reads 8 bit values over SPI
  * @param dev_id Device ID (8 bits I2C address)
  * @param reg_addr Register address to read from
  * @param reg_data Read data buffer
  * @param len Number of bytes to read
  * @return 0 on success, non-zero for failure
  */
-int8_t BME680::i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len) {
+int8_t BME680::spi_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len) {
     int8_t result;
     char data[1];
 
     data[0] = (char) reg_addr;
 
-    log("[0x%X] I2C $%X => ", dev_id >> 1, data[0]);
+    log("[0x%X] SPI $%X => ", dev_id >> 1, data[0]);
 
-    result = i2c.write(dev_id, data, 1);
+    cs.write(0);
+    spi.write(data, 1, (char *) reg_data, 0);
+    result = spi.write(data, 0, (char *) reg_data, len);
+    cs.write(1);
+
     log("[W: %d] ", result);
-
-    result = i2c.read(dev_id, (char *) reg_data, len);
 
     for (uint8_t i = 0; i < len; i++) log("0x%X ", reg_data[i]);
 
     log("[R: %d, L: %d] \r\n", result, len);
 
-    return result;
+    if (result != 0) {
+        return 0;
+    }
+    return 1;
 }
 
 /**
- * Writes 8 bit values over I2C
+ * Writes 8 bit values over SPI
  * @param dev_id Device ID (8 bits I2C address)
  * @param reg_addr Register address to write to
  * @param reg_data Write data buffer
  * @param len Number of bytes to write
  * @return 0 on success, non-zero for failure
  */
-int8_t BME680::i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len) {
+int8_t BME680::spi_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len) {
     int8_t result;
     char data[len + 1];
 
@@ -320,15 +322,20 @@ int8_t BME680::i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, ui
         data[i] = (char) reg_data[i - 1];
     }
 
-    log("[0x%X] I2C $%X <= ", dev_id >> 1, data[0]);
+    log("[0x%X] SPI $%X <= ", dev_id >> 1, data[0]);
 
-    result = i2c.write(dev_id, data, len + 1);
+    cs.write(0);
+    result = spi.write(data, len + 1, (char *) reg_data, 0);
+    cs.write(1);
 
     for (uint8_t i = 1; i < len + 1; i++) log("0x%X ", data[i]);
 
     log("[W: %d, L: %d] \r\n", result, len);
 
-    return result;
+    if (result != 0) {
+        return 0;
+    }
+    return 1;
 }
 
 void BME680::delay_msec(uint32_t ms) {

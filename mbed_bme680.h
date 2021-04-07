@@ -4,20 +4,18 @@
 #include "bme680.h"
 #include "mbed.h"
 
-#define BME680_DEFAULT_ADDRESS (0x77 << 1)  // The default I2C address (shifted for MBed 8 bit address)
-//#define BME680_DEBUG_MODE  // Use this for enhance debug logs for I2C and more.
+//#define BME680_DEBUG_MODE  // Use this for enhance debug logs for SPI and more.
 
-extern I2C i2c;
+extern SPI spi;
+extern DigitalOut cs;
 
 /**
- * BME680 Class for I2C usage.
+ * BME680 Class for SPI usage.
  * Wraps the Bosch library for MBed usage.
  */
 class BME680 {
 public:
     BME680();
-
-    BME680(uint8_t adr);
 
     bool begin();
 
@@ -58,9 +56,9 @@ private:
     static void log(const char *format, ...);
 
     // BME680 - hardware interface
-    static int8_t i2c_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len);
+    static int8_t spi_write(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len);
 
-    static int8_t i2c_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len);
+    static int8_t spi_read(uint8_t dev_id, uint8_t reg_addr, uint8_t *reg_data, uint16_t len);
 
     static void delay_msec(uint32_t ms);
 };
